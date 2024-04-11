@@ -1,0 +1,102 @@
+name: workflows_action
+on:
+  push:
+    branches-ignore:
+      - 'ga-ignore-**'
+  pull_request:
+    branches-ignore:
+      - 'ga-ignore-**'
+env:
+  MIRROR_URL: "git@github.com:EpitechPromo2028/B-DOP-200-COT-2-1-chocolatine-oscar.gbenou.git"
+  EXECUTABLES: "alpha,unit_tests"
+
+jobs:
+  current_repository:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check branch name
+        run: |
+          if [ ${{ github.repository }} == "$MIRROR_URL" ]; then
+            echo "Skipping workflow for the mirror repository"
+            exit 78
+          fi
+
+  check_coding_style:
+    needs: current_repository
+
+    runs-on: ubuntu-latest
+
+    container:
+      image: ghcr.io/epitech/coding-style-checker:latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: run coding style checker script
+        run: |
+          check.sh . /tmp
+
+      - name: Check for coding style errors
+        run: |
+          content=$(</tmp/coding-style-reports.log)
+          IFS=$'\n'
+          for line in $content; do
+              IFS=":"
+              read -ra parts <<< "$line"
+              for part in "${parts[@]}"; do
+                  echo "$part"
+              done
+          done
+
+  check_program_compilation:
+    needs: check_coding_style
+
+    container:
+      image: epitechcontent/epitest-docker:latest
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: run_make
+        run: |
+          make
+
+      - name: run_make_clean ## checker si cela a généré un exécutable
+        run: |
+          make clean
+
+  run_tests:
+    needs: check_program_compilation
+
+    container:
+      image: epitechcontent/epitest-docker:latest
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: make_test
+        run: make tests_run
+
+  push_to_mirror:
+    needs: run_tests
+
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+      - uses: pixta-dev/repository-mirroring-action@v1
+        with:
+          target_repo_url:
+              ${{ env.MIRROR_URL }}
+          ssh_private_key:
+              ${{ secrets.GIT_SSH_PRIVATE_KEY }}
