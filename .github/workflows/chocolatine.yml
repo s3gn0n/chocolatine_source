@@ -6,6 +6,7 @@ on:
   push:
     branches-ignore:
       - 'ga-ignore-'
+      
 jobs:
   check_coding_style:
     name: checker
